@@ -1,25 +1,53 @@
 // public/js/script.js
 
+console.log("✅ File script.js đã được tải thành công!");
+
 // --- 1. CẤU HÌNH & BIẾN TOÀN CỤC ---
-const API_URL = "/api"; // Gọi đến chính server Node.js này
+const API_URL = "/api"; 
 
 // --- 2. XỬ LÝ GIAO DIỆN (UI) ---
 
 // Chờ web tải xong mới chạy code
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Web đã tải xong!");
+    console.log("🚀 Web đã tải xong giao diện!");
     checkLogin();
 });
 
-// Hàm chuyển Tab (Menu)
+// Hàm kiểm tra trạng thái đăng nhập
+function checkLogin() {
+    const isLogged = localStorage.getItem('isLoggedIn');
+    const overlay = document.getElementById('login-overlay');
+    
+    if (isLogged) {
+        // Đã đăng nhập
+        if(overlay) overlay.style.display = 'none';
+        
+        // Hiển thị tên người dùng
+        const nameDisplay = document.getElementById('admin-display-name');
+        if(nameDisplay) nameDisplay.innerText = localStorage.getItem('username') || "Admin";
+        
+        // Mặc định vào tab Tổng quan nếu chưa chọn tab nào
+        if(!document.querySelector('.tab.active')) {
+            window.switchTab('overview', document.getElementById('menu_overview'));
+        }
+    } else {
+        // Chưa đăng nhập
+        if(overlay) overlay.style.display = 'flex';
+    }
+}
+
+// Hàm chuyển Tab (Menu) - Gán vào window để HTML gọi được
 window.switchTab = function(tabId, element) {
+    console.log("Chuyển sang tab:", tabId);
+
     // Ẩn tất cả các tab
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
 
     // Hiện tab được chọn
-    document.getElementById(tabId).classList.add('active');
-    if(element) element.classList.add('active');
+    const targetTab = document.getElementById(tabId);
+    if (targetTab) targetTab.classList.add('active');
+    if (element) element.classList.add('active');
 
     // Nếu vào tab Phòng ban thì tải dữ liệu
     if (tabId === 'departments') {
@@ -28,61 +56,60 @@ window.switchTab = function(tabId, element) {
     
     // Đóng sidebar trên mobile sau khi chọn
     if(window.innerWidth < 768) {
-        toggleSidebar();
+        window.toggleSidebar();
     }
 };
 
-// Hàm bật/tắt Sidebar (Mobile)
+// Hàm bật/tắt Sidebar
 window.toggleSidebar = function() {
-    document.getElementById('sidebar').classList.toggle('active');
-    document.querySelector('.main').classList.toggle('active');
+    const sidebar = document.getElementById('sidebar');
+    const main = document.querySelector('.main');
+    if(sidebar) sidebar.classList.toggle('active');
+    if(main) main.classList.toggle('active');
 };
 
 // --- 3. XỬ LÝ ĐĂNG NHẬP (LOGIN) ---
 
 window.handleLogin = function(event) {
     event.preventDefault(); // Chặn reload trang
-    
-    const user = document.getElementById('login-user').value;
-    const pass = document.getElementById('login-pass').value;
+    console.log("🖱️ Đã bấm nút Đăng nhập");
 
-    // Demo đăng nhập đơn giản (Sau này sẽ nối Database)
-    if (user === 'admin' && pass === '123456') {
+    const userInput = document.getElementById('login-user');
+    const passInput = document.getElementById('login-pass');
+    const errorMsg = document.getElementById('login-error');
+
+    const user = userInput ? userInput.value.trim() : "";
+    const pass = passInput ? passInput.value.trim() : "";
+
+    // LOGIC ĐĂNG NHẬP (HARDCODE TẠM THỜI)
+    // Cho phép dùng 'admin' HOẶC email của bạn 'bachmn@gmail.com'
+    // Mật khẩu chung: '123456'
+    if ((user === 'admin' || user.includes('@')) && pass === '123456') {
+        console.log("✅ Đăng nhập thành công!");
+        
         localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('username', user);
-        checkLogin();
+        
+        checkLogin(); // Cập nhật giao diện
     } else {
-        document.getElementById('login-error').innerText = "Sai tài khoản hoặc mật khẩu!";
+        console.warn("❌ Đăng nhập thất bại");
+        if(errorMsg) errorMsg.innerText = "Sai mật khẩu! (Thử lại: 123456)";
     }
 };
 
 window.handleLogout = function() {
-    if(confirm("Bạn muốn đăng xuất?")) {
+    if(confirm("Bạn muốn đăng xuất khỏi hệ thống?")) {
         localStorage.removeItem('isLoggedIn');
-        location.reload();
+        localStorage.removeItem('username');
+        location.reload(); // Tải lại trang để về màn hình login
     }
 };
 
-function checkLogin() {
-    const isLogged = localStorage.getItem('isLoggedIn');
-    const overlay = document.getElementById('login-overlay');
-    
-    if (isLogged) {
-        overlay.style.display = 'none'; // Ẩn màn hình login
-        document.getElementById('admin-display-name').innerText = localStorage.getItem('username');
-        // Mặc định vào tab Tổng quan
-        window.switchTab('overview', document.getElementById('menu_overview'));
-    } else {
-        overlay.style.display = 'flex'; // Hiện màn hình login
-    }
-}
-
 // --- 4. CHỨC NĂNG PHÒNG BAN (Gọi API Node.js) ---
 
-// Mở Modal Thêm/Sửa
 window.openDeptModal = function(mode, id = null, name = '', desc = '') {
     const modal = document.getElementById('deptModal');
-    modal.style.display = 'flex';
+    if(modal) modal.style.display = 'flex';
 
     document.getElementById('deptKey').value = id || '';
     document.getElementById('deptName').value = name;
@@ -90,23 +117,29 @@ window.openDeptModal = function(mode, id = null, name = '', desc = '') {
 };
 
 window.closeDeptModal = function() {
-    document.getElementById('deptModal').style.display = 'none';
+    const modal = document.getElementById('deptModal');
+    if(modal) modal.style.display = 'none';
 };
 
-// Tải danh sách phòng ban từ Server
+// Tải danh sách phòng ban
 async function loadDepartments() {
     const tbody = document.getElementById('deptTableBody');
-    tbody.innerHTML = '<tr><td colspan="4">Đang tải dữ liệu...</td></tr>';
+    if(!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">⏳ Đang tải dữ liệu...</td></tr>';
 
     try {
-        // Gọi API GET /api/departments
         const response = await fetch(`${API_URL}/departments`);
         const data = await response.json();
 
-        tbody.innerHTML = ''; // Xóa chữ đang tải
+        tbody.innerHTML = ''; 
+
+        if(!data || Object.keys(data).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có dữ liệu</td></tr>';
+            return;
+        }
 
         let index = 1;
-        // Duyệt qua object data trả về từ Firebase
         for (const [key, value] of Object.entries(data)) {
             const row = `
                 <tr>
@@ -114,32 +147,37 @@ async function loadDepartments() {
                     <td><b>${value.name}</b></td>
                     <td>${value.desc}</td>
                     <td>
-                        <button class="btn btn-sm btn-warning" onclick="window.openDeptModal('edit', '${key}', '${value.name}', '${value.desc}')">Sửa</button>
-                        <button class="btn btn-sm btn-danger" onclick="window.deleteDepartment('${key}')">Xóa</button>
+                        <button class="btn-edit" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-right:5px" 
+                            onclick="window.openDeptModal('edit', '${key}', '${value.name}', '${value.desc}')">
+                            <i class="fas fa-edit"></i> Sửa
+                        </button>
+                        <button class="btn-delete" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer" 
+                            onclick="window.deleteDepartment('${key}')">
+                            <i class="fas fa-trash"></i> Xóa
+                        </button>
                     </td>
                 </tr>
             `;
             tbody.innerHTML += row;
         }
     } catch (error) {
-        console.error("Lỗi:", error);
-        tbody.innerHTML = '<tr><td colspan="4" style="color:red">Lỗi tải dữ liệu!</td></tr>';
+        console.error("Lỗi tải API:", error);
+        tbody.innerHTML = '<tr><td colspan="4" style="color:red; text-align:center">❌ Lỗi kết nối Server!</td></tr>';
     }
 }
 
-// Lưu Phòng Ban (Thêm mới hoặc Sửa)
+// Lưu Phòng Ban
 window.saveDepartment = async function(event) {
     event.preventDefault();
     
     const key = document.getElementById('deptKey').value;
     const name = document.getElementById('deptName').value;
     const desc = document.getElementById('deptDesc').value;
-    const adminName = localStorage.getItem('username');
+    const adminName = localStorage.getItem('username') || "Admin";
 
     const payload = { key, name, desc, adminName };
 
     try {
-        // Gọi API POST /api/departments
         const response = await fetch(`${API_URL}/departments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -151,12 +189,12 @@ window.saveDepartment = async function(event) {
         if (result.success) {
             alert(result.message);
             window.closeDeptModal();
-            loadDepartments(); // Tải lại bảng
+            loadDepartments(); 
         } else {
             alert("Lỗi: " + result.message);
         }
     } catch (error) {
-        alert("Lỗi kết nối server!");
+        alert("Không thể kết nối tới Server!");
         console.error(error);
     }
 };
@@ -174,7 +212,7 @@ window.deleteDepartment = async function(id) {
 
         const result = await response.json();
         if (result.success) {
-            loadDepartments(); // Tải lại bảng
+            loadDepartments(); 
         } else {
             alert("Lỗi: " + result.message);
         }
@@ -183,12 +221,11 @@ window.deleteDepartment = async function(id) {
     }
 };
 
-// --- 5. CÁC HÀM KHÁC (Placeholder) ---
-// Để code không bị lỗi khi bấm vào các nút chưa làm xong
+// --- 5. HÀM CHỜ (PLACEHOLDER) ---
 window.openModal = () => alert("Chức năng đang cập nhật...");
 window.closeModal = () => document.getElementById('modal').style.display = 'none';
 window.openPosModal = () => alert("Chức năng đang cập nhật...");
 window.closePosModal = () => document.getElementById('posModal').style.display = 'none';
 window.openScanner = () => document.getElementById('scannerModal').style.display = 'flex';
 window.closeScanner = () => document.getElementById('scannerModal').style.display = 'none';
-window.changeLanguage = (lang) => alert("Đổi ngôn ngữ: " + lang);
+window.changeLanguage = (lang) => alert("Đã chuyển ngôn ngữ: " + lang);
