@@ -1,0 +1,142 @@
+/* css/style.css */
+
+body { 
+    background-color: #f0f2f5; 
+    font-family: "Meiryo", "Hiragino Kaku Gothic ProN", sans-serif; 
+}
+
+.auth-wrapper { 
+    min-height: 100vh; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    position: relative; 
+}
+
+.auth-box { 
+    width: 100%; 
+    max-width: 450px; 
+    padding: 40px; 
+    background: white; 
+    border-radius: 12px; 
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+}
+
+.hidden { 
+    display: none !important; 
+}
+
+/* Language Switcher */
+.lang-switcher-top { 
+    position: absolute; 
+    top: 20px; 
+    right: 20px; 
+    z-index: 1000; 
+    display: flex; 
+    gap: 10px; 
+}
+
+.flag-btn { 
+    width: 32px; 
+    height: 22px; 
+    cursor: pointer; 
+    opacity: 0.6; 
+    transition: 0.2s; 
+    border: 1px solid #ccc; 
+    border-radius: 3px; 
+    object-fit: cover; 
+}
+
+.flag-btn:hover, .flag-btn.active { 
+    opacity: 1; 
+    transform: scale(1.1); 
+    border-color: #0d6efd; 
+    box-shadow: 0 0 5px rgba(0,0,0,0.2); 
+}
+
+/* Avatar */
+.avatar-container { 
+    position: relative; 
+    display: inline-block; 
+}
+
+.avatar-box { 
+    width: 160px; 
+    height: 160px; 
+    border-radius: 50%; 
+    object-fit: cover; 
+    border: 5px solid #fff; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+}
+
+/* Form inputs */
+.form-control:disabled { 
+    background-color: #f8f9fa; 
+    border: 1px solid #e9ecef; 
+    color: #495057; 
+    opacity: 1; 
+    font-weight: 500; 
+}
+
+.editable-active { 
+    background-color: #fff !important; 
+    border: 1px solid #198754 !important; 
+}
+
+/* Calendar */
+.calendar-table th { 
+    background-color: #f8f9fa; 
+    color: #666; 
+    font-weight: bold; 
+}
+
+.calendar-day { 
+    height: 100px; 
+    vertical-align: top; 
+    width: 14.28%; 
+    position: relative; 
+    border: 1px solid #dee2e6; 
+    background: #fff; 
+}
+
+.date-number { 
+    font-weight: bold; 
+    font-size: 1rem; 
+    color: #333; 
+    position: absolute; 
+    top: 5px; 
+    left: 8px; 
+}
+
+.status-mark { 
+    font-size: 2rem; 
+    position: absolute; 
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%); 
+}
+
+.bg-working { 
+    background-color: #e8f5e9; 
+} 
+
+.bg-off { 
+    background-color: #ffebee; 
+}
+
+/* Pending Screen */
+.pending-box { 
+    text-align: center; 
+    padding: 50px 30px; 
+    background: white; 
+    border-radius: 15px; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+    max-width: 600px; 
+    width: 90%; 
+}
+
+.pending-icon { 
+    font-size: 5rem; 
+    color: #ffc107; 
+    margin-bottom: 20px; 
+}

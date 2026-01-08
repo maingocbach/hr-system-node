@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Admin System</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="admin/css/style.css"> 
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        /* CSS CHO MÀN HÌNH LOGIN */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #ecf0f1; z-index: 9999; display: flex;
+            justify-content: center; align-items: center;
+        }
+        .login-box {
+            background: white; padding: 40px; border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 350px; text-align: center;
+        }
+        .login-box h2 { color: #2c3e50; margin-bottom: 20px; }
+        .login-box input {
+            width: 100%; padding: 12px; margin-bottom: 15px;
+            border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box;
+        }
+        .login-box button {
+            width: 100%; padding: 12px; background: #3498db; color: white;
+            border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold;
+        }
+        .login-box button:hover { background: #2980b9; }
+
+        /* CSS CHO TAB PHÂN QUYỀN */
+        .perm-container { display: flex; gap: 20px; height: auto; min-height: calc(100vh - 200px); }
+        .perm-list { width: 30%; background: white; padding: 15px; border-radius: 8px; overflow-y: auto; }
+        .perm-matrix { width: 70%; background: white; padding: 15px; border-radius: 8px; overflow-y: auto; }
+        .perm-item {
+            padding: 10px; border-bottom: 1px solid #eee; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .perm-item:hover, .perm-item.active { background: #f0f8ff; color: #3498db; }
+        .perm-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .perm-table th, .perm-table td { border: 1px solid #eee; padding: 10px; text-align: center; vertical-align: middle; }
+        .perm-table th { background: #f8f9fa; }
+        .perm-check { transform: scale(1.5); cursor: pointer; }
+
+        /* Tùy chỉnh cho bảng chấm công */
+        .timesheet-table th { background-color: #f1f3f5; font-size: 0.85rem; text-transform: uppercase; }
+        .hours-badge { background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+
+        /* SỬA LỖI CHE DỮ LIỆU TRÊN MÁY TÍNH */
+        .sidebar {
+            display: flex !important;
+            flex-direction: column !important;
+            height: 100vh !important;
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 250px;
+            z-index: 1050;
+            background: #2c3e50;
+            transition: 0.3s;
+        }
+
+        /* ĐẨY NỘI DUNG SANG PHẢI TRÊN PC */
+        .main {
+            margin-left: 250px !important; /* Khoảng cách bằng chiều rộng sidebar */
+            padding: 30px !important;
+            min-height: 100vh;
+            background: #f4f7f6;
+            transition: 0.3s;
+        }
+
+        .menu-toggle {
+            position: fixed; top: 15px; left: 15px; z-index: 1100;
+            background: #3498db; color: white; padding: 10px 15px;
+            border-radius: 5px; border: none; cursor: pointer;
+            display: none; /* Ẩn trên PC */
+        }
+
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .sidebar { left: -260px; }
+            .sidebar.active { left: 0; }
+            .main { 
+                margin-left: 0 !important; 
+                width: 100% !important; 
+                padding: 70px 15px 20px 15px !important; 
+            }
+        }
+		
+		#deptModal { z-index: 9999 !important; }
+    </style>
+</head>
+<body>
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2><i class="fas fa-user-shield"></i> HR System</h2>
+            <p style="color:red; font-size:13px; margin-bottom:10px" id="login-error"></p>
+            <form onsubmit="window.handleLogin(event)">
+                <input type="text" id="login-user" placeholder="Email hoặc Mã NV" required>
+                <input type="password" id="login-pass" placeholder="Mật khẩu" required>
+                <button type="submit">Đăng Nhập</button>
+            </form>
+        </div>
+    </div>
+
+    <button class="menu-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header" style="padding: 20px 20px 10px 20px;">
+            <div class="lang-switcher">
+                <img src="https://flagcdn.com/w40/vn.png" class="flag-btn" onclick="changeLanguage('vi')" title="Tiếng Việt">
+                <img src="https://flagcdn.com/w40/jp.png" class="flag-btn" onclick="changeLanguage('jp')" title="日本語">
+                <img src="https://flagcdn.com/w40/us.png" class="flag-btn" onclick="changeLanguage('en')" title="English">
+            </div>
+            <span class="app-title" data-i18n="app_title">Hệ Thống Nhân Sự</span>
+            <button class="close-sidebar-btn" onclick="toggleSidebar()"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="user-welcome" style="padding: 10px 25px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 10px;">
+            <small style="color: #bdc3c7; display: block; font-size: 11px; text-transform: uppercase;">Xin chào,</small>
+            <strong id="admin-display-name" style="color: #ecf0f1; font-size: 15px;"><i class="fas fa-user-circle me-2"></i>Quản Trị Viên</strong>
+        </div>
+        
+        <div class="menu-list-container" style="flex: 1; overflow-y: auto; padding-bottom: 30px;">
+            <div class="menu-item active" id="menu_overview" onclick="switchTab('overview', this)">
+                <i class="fas fa-chart-pie"></i> <span data-i18n="menu_overview">Tổng Quan</span>
+            </div>
+            <div class="menu-item" id="menu_timesheet" onclick="switchTab('timesheet', this)">
+                <i class="fas fa-clock"></i> <span>Chấm Công</span>
+            </div>
+            <div class="menu-item" id="menu_approvals" onclick="switchTab('approvals', this)">
+                <i class="fas fa-user-check"></i> <span data-i18n="menu_approval">Phê Duyệt</span>
+            </div>
+            <div class="menu-item" id="menu_employees" onclick="switchTab('employees', this)">
+                <i class="fas fa-users"></i> <span data-i18n="menu_staff">Nhân Viên</span>
+            </div>
+            <div class="menu-item" id="menu_departments" onclick="switchTab('departments', this)">
+                <i class="fas fa-building"></i> <span data-i18n="menu_dept">Phòng Ban</span>
+            </div>
+            <div class="menu-item" id="menu_positions" onclick="switchTab('positions', this)">
+                <i class="fas fa-id-badge"></i> <span data-i18n="menu_pos">Chức Vụ</span>
+            </div>
+            <div class="menu-item" id="menu_schedule" onclick="switchTab('schedule', this)">
+                <i class="fas fa-calendar-alt"></i> <span data-i18n="menu_schedule">Lịch Làm Việc</span>
+            </div>
+            <div class="menu-item" id="menu_permissions" onclick="switchTab('permissions', this)">
+                <i class="fas fa-shield-alt"></i> <span>Phân Quyền</span>
+            </div>
+            
+            <div class="menu-item" id="menu_history" onclick="switchTab('history', this)">
+                <i class="fas fa-history"></i> <span>Lịch Sử Dữ Liệu</span>
+            </div>
+
+            <div class="menu-item logout-btn" onclick="window.handleLogout()" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); color: #ff7675 !important; font-weight: bold;">
+                <i class="fas fa-sign-out-alt"></i> <span>Đăng Xuất</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div id="overview" class="tab active" data-module="overview">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 data-i18n="menu_overview">Tổng Quan</h2>
+                <button class="btn btn-primary" onclick="window.openScanner()" style="border-radius: 20px; padding: 10px 25px; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);">
+                    <i class="fas fa-qrcode"></i> Quét Điểm Danh
+                </button>
+            </div>
+
+            <div id="scannerModal" class="modal" style="display: none; align-items: center; justify-content: center;">
+                <div class="modal-content" style="width: 90%; max-width: 500px; padding: 25px; border-radius: 20px;">
+                    <h4 class="text-center mb-3">Quét mã QR nhân viên</h4>
+                    <div id="reader" style="width: 100%; border-radius: 15px; overflow: hidden; border: 2px solid #3498db;"></div>
+                    <div id="scannerResult" class="mt-3 text-center fw-bold" style="min-height: 50px;"></div>
+                    <div class="modal-footer mt-3">
+                        <button class="btn btn-danger w-100" onclick="window.closeScanner()">Đóng Trình Quét</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cards">
+                <div class="card"><h3 data-i18n="card_total">Tổng nhân viên</h3><div class="num" id="total-staff">0</div></div>
+                <div class="card"><h3 data-i18n="card_online" style="color:#2980b9">Đang Online</h3><div class="num" id="online-count" style="color:#2980b9">0</div></div>
+                <div class="card"><h3 data-i18n="card_working">Đi làm hôm nay</h3><div class="num" id="working-today" style="color:#27ae60">0</div></div>
+                <div class="card"><h3 data-i18n="card_off">Nghỉ phép</h3><div class="num" id="off-today" style="color:#e74c3c">0</div></div>
+            </div>
+            <div class="charts">
+                <div class="chart-box"><h3 data-i18n="chart_rate">Tỷ lệ đi làm</h3><div style="height:250px; display:flex; justify-content:center"><canvas id="pieChart"></canvas></div></div>
+                <div class="chart-box"><h3 data-i18n="list_online">Danh sách đang Online</h3><ul class="online-list" id="online-list-container"></ul></div>
+            </div>
+            <div class="chart-box" style="margin-top: 20px"><h3 data-i18n="chart_dept">Thống kê phòng ban</h3><div id="dept-stats">Đang tải...</div></div>
+        </div>
+
+        <div id="timesheet" class="tab" data-module="timesheet">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Bảng Chấm Công Chi Tiết</h2>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="month" id="timesheetMonth" class="form-control" style="width: 200px; padding: 8px;" onchange="window.loadTimesheet()">
+                    <button class="btn btn-success" onclick="window.exportTimesheetToExcel()">
+                        <i class="fas fa-file-excel"></i> Xuất Excel
+                    </button>
+                </div>
+            </div>
+            <div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow-x: auto;">
+                <table class="perm-table timesheet-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Nhân viên</th>
+                            <th>Ngày</th>
+                            <th>Check-in</th>
+                            <th>Bắt đầu nghỉ</th>
+                            <th>Kết thúc nghỉ</th>
+                            <th>Check-out</th>
+                            <th>Công ngày</th>
+                        </tr>
+                    </thead>
+                    <tbody id="timesheetTableBody">
+                        <tr><td colspan="7">Chọn tháng để xem dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="approvals" class="tab" data-module="approvals">
+            <h2 data-i18n="title_approval">Phê Duyệt Người Dùng</h2><br>
+            <p style="color:#666; margin-bottom:10px" data-i18n="desc_approval">Danh sách chờ duyệt:</p>
+            <table>
+                <thead><tr><th data-i18n="col_name_email">Họ Tên / Email</th><th data-i18n="col_phone">SĐT</th><th data-i18n="col_status">Trạng Thái</th><th data-i18n="col_action">Hành Động</th></tr></thead>
+                <tbody id="approvalTableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="employees" class="tab" data-module="employees">
+            <h2 data-i18n="title_staff_list">Danh Sách Nhân Viên</h2><br>
+            <div class="toolbar">
+                <input type="text" id="search" placeholder="..." onkeyup="window.filterData()">
+                <select id="filterDept" onchange="window.filterData()"><option value="">All Depts</option></select>
+                <select id="filterPos" onchange="window.filterData()"><option value="">All Roles</option></select>
+                <button class="btn btn-primary perm-btn-add" onclick="window.openModal('add')"><i class="fas fa-plus"></i> <span data-i18n="btn_add">Thêm Mới</span></button>
+            </div>
+            <table>
+                <thead><tr>
+                    <th data-i18n="col_staff">Nhân Viên</th><th data-i18n="col_code">Mã</th><th data-i18n="menu_dept">Phòng Ban</th><th data-i18n="menu_pos">Chức Vụ</th><th data-i18n="col_status">Trạng Thái</th><th data-i18n="col_action">Hành Động</th>
+                </tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="departments" class="tab" data-module="departments">
+            <h2 data-i18n="menu_dept">Phòng Ban</h2><br>
+            <div class="toolbar"><button class="btn btn-primary perm-btn-add" onclick="window.openDeptModal('add')"><i class="fas fa-plus"></i> <span data-i18n="btn_add">Thêm</span></button></div>
+            <table><thead><tr><th style="width:50px">STT</th><th data-i18n="col_name">Tên</th><th data-i18n="col_desc">Mô Tả</th><th data-i18n="col_action">Hành Động</th></tr></thead><tbody id="deptTableBody"></tbody></table>
+        </div>
+
+        <div id="positions" class="tab" data-module="positions">
+            <h2 data-i18n="menu_pos">Chức Vụ</h2><br>
+            <div class="toolbar"><button class="btn btn-primary perm-btn-add" onclick="window.openPosModal('add')"><i class="fas fa-plus"></i> <span data-i18n="btn_add">Thêm</span></button></div>
+            <table><thead><tr><th style="width:50px">STT</th><th data-i18n="col_name">Tên</th><th data-i18n="col_desc">Mô Tả</th><th data-i18n="col_action">Hành Động</th></tr></thead><tbody id="posTableBody"></tbody></table>
+        </div>
+
+        <div id="schedule" class="tab" data-module="schedule">
+            <div class="d-flex" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+                <h2 data-i18n="menu_schedule">Lịch Làm Việc</h2>
+                <div style="background: white; padding: 5px 15px; border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display:flex; align-items:center; gap:15px">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.changeWeek(-1)"><i class="fas fa-chevron-left"></i></button>
+                    <span id="currentWeekLabel" style="font-weight:bold; min-width: 200px; text-align:center">---</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.changeWeek(1)"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+            <div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.05)">
+                <p style="font-size:0.9rem; color:#666; margin-bottom:10px" data-i18n="hint_schedule"><i class="fas fa-info-circle"></i> Click vào ô ngày để đổi trạng thái.</p>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse: separate; border-spacing: 0;">
+                        <thead><tr id="scheduleHeaderDates"></tr></thead>
+                        <tbody id="scheduleTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="permissions" class="tab" data-module="permissions">
+            <h2>Thiết Lập Phân Quyền</h2><br>
+            <div class="perm-container">
+                <div class="perm-list">
+                    <h4 style="margin-bottom:10px; color:#666">Chọn Đối Tượng</h4>
+                    <select id="permTypeSelect" onchange="window.loadPermSubjects()" style="width:100%; padding:8px; margin-bottom:10px; border:1px solid #ddd; border-radius:4px">
+                        <option value="pos">Theo Chức Vụ</option>
+                        <option value="dept">Theo Phòng Ban</option>
+                        <option value="user">Theo Nhân Viên</option>
+                    </select>
+                    <div id="permSubjectList"></div>
+                </div>
+                <div class="perm-matrix">
+                    <div style="display:flex; justify-content:space-between; align-items:center">
+                        <h3 id="currentPermSubject" style="color:var(--primary)">---</h3>
+                        <button class="btn btn-primary" onclick="window.savePermissions()">Lưu Quyền</button>
+                    </div>
+                    <table class="perm-table">
+                        <thead>
+                            <tr>
+                                <th>Chức Năng</th>
+                                <th>Xem <br><input type="checkbox" onclick="window.toggleColumn('view', this)"></th>
+                                <th>Thêm <br><input type="checkbox" onclick="window.toggleColumn('add', this)"></th>
+                                <th>Sửa <br><input type="checkbox" onclick="window.toggleColumn('edit', this)"></th>
+                                <th>Xóa <br><input type="checkbox" onclick="window.toggleColumn('delete', this)"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="permMatrixBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div id="history" class="tab" data-module="history">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Nhật Ký Thay Đổi Hệ Thống</h2>
+                <select id="historyFilter" class="form-control" style="width: 250px;" onchange="window.loadSystemHistory()">
+                    <option value="all">Tất cả các bảng</option>
+                    <option value="attendance">Bảng Chấm Công</option>
+                    <option value="employees">Bảng Nhân Viên</option>
+                    <option value="departments">Bảng Phòng Ban</option>
+                    <option value="positions">Bảng Chức Vụ</option>
+                </select>
+            </div>
+            <div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow-x: auto;">
+                <table class="perm-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Thời gian</th>
+                            <th>Người thực hiện</th>
+                            <th>Hành động</th>
+                            <th>Bảng/Đối tượng</th>
+                            <th>Nội dung chi tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="approvalModal" class="modal"><div class="modal-content" style="width:500px">
+        <h3 data-i18n="title_approval_modal">Duyệt Nhân Viên</h3><br>
+        <form onsubmit="window.approveUser(event)">
+            <input type="hidden" id="approveKey">
+            <div class="form-group"><label data-i18n="lbl_name">Họ Tên</label><input type="text" id="approveName" required></div>
+            <div class="form-group"><label data-i18n="lbl_code">Mã NV</label><input type="text" id="approveCode" required></div>
+            <div class="form-group"><label>Email</label><input type="text" id="approveEmail"></div>
+            <div class="form-group"><label data-i18n="lbl_phone">SĐT</label><input type="text" id="approvePhone"></div>
+            <div class="form-group"><label style="color:#e67e22" data-i18n="menu_dept">Phòng Ban (*)</label><select id="approveDept" required><option value="">--</option></select></div>
+            <div class="form-group"><label style="color:#e67e22" data-i18n="menu_pos">Chức Vụ (*)</label><select id="approvePos" required><option value="">--</option></select></div>
+            <div class="modal-footer"><button type="button" class="btn btn-danger" onclick="window.closeApprovalModal()" data-i18n="btn_close">Đóng</button><button type="submit" class="btn btn-primary" data-i18n="btn_approve">Duyệt</button></div>
+        </form>
+    </div></div>
+
+    <div id="modal" class="modal"><div class="modal-content">
+        <h2 id="modalTitle" style="text-align: center; color: var(--primary);" data-i18n="title_staff_info">Thông tin nhân viên</h2>
+        <form id="empForm" onsubmit="window.saveEmployee(event)">
+            <input type="hidden" id="empKey">
+            <div class="section-title"><i class="fas fa-briefcase"></i> <span data-i18n="sec_job">Công Việc</span></div>
+            <div class="form-grid">
+                <div class="form-group"><label data-i18n="lbl_code">Mã NV (*)</label><input type="text" id="code" required></div>
+                <div class="form-group"><label data-i18n="lbl_name">Họ Tên (*)</label><input type="text" id="name" required></div>
+                <div class="form-group"><label data-i18n="menu_dept">Phòng Ban</label><select id="dept"></select></div>
+                <div class="form-group"><label data-i18n="menu_pos">Chức Vụ</label><select id="pos"></select></div>
+                <div class="form-group"><label data-i18n="lbl_start_date">Ngày vào</label><input type="date" id="startDate"></div>
+                <div class="form-group"><label data-i18n="lbl_shift">Ca làm</label><input type="text" id="shift"></div>
+                <div class="form-group"><label data-i18n="col_status">Trạng thái</label><select id="status"><option value="working">Working</option><option value="off">Off</option></select></div>
+                <div class="form-group"><label>Email (*)</label><input type="email" id="email" required></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-danger" onclick="window.closeModal()" data-i18n="btn_close">Đóng</button><button type="submit" class="btn btn-primary" data-i18n="btn_save">Lưu</button></div>
+        </form>
+    </div></div>
+<div id="deptModal" class="modal">
+    <div class="modal-content" style="width:500px">
+        <h3 data-i18n="menu_dept">Phòng Ban</h3>
+        <br>
+        <form onsubmit="window.saveDepartment(event)">
+            <input type="hidden" id="deptKey">
+            
+            <div class="form-group">
+                <label data-i18n="col_name">Tên phòng ban</label>
+                <input type="text" id="deptName" required>
+            </div>
+            
+            <div class="form-group">
+                <label data-i18n="col_desc">Mô tả</label>
+                <input type="text" id="deptDesc">
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="window.closeDeptModal()" data-i18n="btn_close">Đóng</button>
+                <button type="submit" class="btn btn-primary" data-i18n="btn_save">Lưu</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="posModal" class="modal">
+    <div class="modal-content" style="width:500px">
+        <h3 data-i18n="menu_pos">Chức Vụ</h3>
+        <br>
+        <form onsubmit="window.savePosition(event)">
+            <input type="hidden" id="posKey">
+            <div class="form-group">
+                <label data-i18n="col_name">Tên chức vụ</label>
+                <input type="text" id="posName" required>
+            </div>
+            <div class="form-group">
+                <label data-i18n="col_desc">Mô tả</label>
+                <input type="text" id="posDesc">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="window.closePosModal()" data-i18n="btn_close">Đóng</button>
+                <button type="submit" class="btn btn-primary" data-i18n="btn_save">Lưu</button>
+            </div>
+        </form>
+    </div>
+</div>
+    <script type="module" src="script.js"></script>
+</body>
+</html>
