@@ -1,422 +1,155 @@
 // public/js/script.js
 
-console.log("✅ File script.js đã được tải thành công!");
+import { employees, initEmployeeListeners } from './employees.js';
+import { departments, initDepartmentListeners } from './departments.js';
+import { positions, initPositionListeners } from './positions.js';
+import { pendingList, initApprovalListeners } from './approvals.js';
+import { initScheduleListeners, renderScheduleTable, toggleShiftLogic } from './schedule.js';
+import { handleLogin, initPermissionTab } from './auth.js'; // Đã bỏ handleLogout
 
-// --- 1. CẤU HÌNH & BIẾN TOÀN CỤC ---
-const API_URL = "/api"; 
+let myChart = null;
 
-// --- 2. XỬ LÝ GIAO DIỆN (UI) ---
-
-// Chờ web tải xong mới chạy code
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 Web đã tải xong giao diện!");
-    checkLogin();
+    // 1. Init Data Listeners
+    initEmployeeListeners();
+    initDepartmentListeners();
+    initPositionListeners();
+    initApprovalListeners();
+    initScheduleListeners(); // Init Lịch
+
+    // 2. Check Login
+    const storedUser = localStorage.getItem('hr_user');
+    if (storedUser) {
+        document.getElementById('login-overlay').style.display = 'none';
+        const userObj = JSON.parse(storedUser);
+        if(document.getElementById('admin-display-name')) {
+            document.getElementById('admin-display-name').innerText = userObj.name;
+        }
+        window.switchTab('overview', document.getElementById('menu_overview'));
+    }
+
+    // 3. Login Event
+    const loginForm = document.getElementById('loginForm');
+    if(loginForm) loginForm.addEventListener('submit', (e) => handleLogin(e, employees));
+
+    // 4. Global Utils
+    window.toggleSidebar = () => { const s = document.getElementById('sidebar'); if(s) s.classList.toggle('active'); };
+    
+    window.handleLogout = () => {
+        if(confirm("Đăng xuất?")) { localStorage.removeItem('hr_user'); location.reload(); }
+    };
 });
 
-// Hàm kiểm tra trạng thái đăng nhập
-function checkLogin() {
-    const isLogged = localStorage.getItem('isLoggedIn');
-    const overlay = document.getElementById('login-overlay');
-    
-    if (isLogged) {
-        // Đã đăng nhập
-        if(overlay) overlay.style.display = 'none';
-        
-        // Hiển thị tên người dùng
-        const nameDisplay = document.getElementById('admin-display-name');
-        if(nameDisplay) nameDisplay.innerText = localStorage.getItem('username') || "Admin";
-        
-        // Mặc định vào tab Tổng quan nếu chưa chọn tab nào
-        if(!document.querySelector('.tab.active')) {
-            window.switchTab('overview', document.getElementById('menu_overview'));
-        }
-    } else {
-        // Chưa đăng nhập
-        if(overlay) overlay.style.display = 'flex';
-    }
-}
-
-// Hàm chuyển Tab (Menu) - Gán vào window để HTML gọi được
+// --- SWITCH TAB ---
 window.switchTab = function(tabId, element) {
-    console.log("Chuyển sang tab:", tabId);
-
-    // Ẩn tất cả các tab
-    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
-
-    // Hiện tab được chọn
-    const targetTab = document.getElementById(tabId);
-    if (targetTab) targetTab.classList.add('active');
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    
     if (element) element.classList.add('active');
+    const target = document.getElementById(tabId);
+    if(target) target.classList.add('active');
 
-    // Nếu vào tab Phòng ban thì tải dữ liệu
-    if (tabId === 'departments') {
-        loadDepartments();
+    // Load Data theo Tab
+    if (tabId === 'overview') renderDashboard();
+    if (tabId === 'permissions') initPermissionTab(departments, positions, employees);
+    if (tabId === 'schedule') {
+        renderScheduleTable(employees); // Render bảng lịch
+        // Fill dropdown phòng ban lọc lịch
+        const sel = document.getElementById('filterScheduleDept');
+        if(sel && sel.options.length <= 1) {
+            departments.forEach(d => sel.innerHTML += `<option value="${d.name}">${d.name}</option>`);
+        }
     }
+    if (tabId === 'history') window.loadSystemHistory(); // Load lịch sử
+
+    if(window.innerWidth < 768) document.getElementById('sidebar').classList.remove('active');
+};
+
+// --- DASHBOARD (Full Stats) ---
+function renderDashboard() {
+    if (employees.length === 0) return;
+
+    const total = employees.length;
+    const working = employees.filter(e => e.status === 'working').length;
+    const off = employees.filter(e => e.status === 'off').length;
     
-    // Đóng sidebar trên mobile sau khi chọn
-    if(window.innerWidth < 768) {
-        window.toggleSidebar();
+    // Random số online giả lập (hoặc lấy thật nếu có field online)
+    const online = Math.floor(Math.random() * (working - 1) + 1);
+
+    document.getElementById('total-staff').innerText = total;
+    document.getElementById('working-today').innerText = working;
+    document.getElementById('off-today').innerText = off;
+    const elOnline = document.getElementById('online-count');
+    if(elOnline) elOnline.innerText = online;
+
+    // Chart
+    const ctx = document.getElementById('pieChart');
+    if (ctx) {
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Đi làm', 'Nghỉ'],
+                datasets: [{ data: [working, off], backgroundColor: ['#2ecc71', '#e74c3c'] }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
     }
-};
 
-// Hàm bật/tắt Sidebar
-window.toggleSidebar = function() {
-    const sidebar = document.getElementById('sidebar');
-    const main = document.querySelector('.main');
-    if(sidebar) sidebar.classList.toggle('active');
-    if(main) main.classList.toggle('active');
-};
-
-// --- 3. XỬ LÝ ĐĂNG NHẬP (LOGIN) ---
-
-window.handleLogin = function(event) {
-    event.preventDefault(); // Chặn reload trang
-    console.log("🖱️ Đã bấm nút Đăng nhập");
-
-    const userInput = document.getElementById('login-user');
-    const passInput = document.getElementById('login-pass');
-    const errorMsg = document.getElementById('login-error');
-
-    const user = userInput ? userInput.value.trim() : "";
-    const pass = passInput ? passInput.value.trim() : "";
-
-    // LOGIC ĐĂNG NHẬP (HARDCODE TẠM THỜI)
-    // Cho phép dùng 'admin' HOẶC email của bạn 'bachmn@gmail.com'
-    // Mật khẩu chung: '123456'
-    if ((user === 'admin' || user.includes('@')) && pass === '123456') {
-        console.log("✅ Đăng nhập thành công!");
-        
-        localStorage.setItem('isLoggedIn', 'true');
-        localStorage.setItem('username', user);
-        
-        checkLogin(); // Cập nhật giao diện
-    } else {
-        console.warn("❌ Đăng nhập thất bại");
-        if(errorMsg) errorMsg.innerText = "Sai mật khẩu! (Thử lại: 123456)";
+    // Thống kê phòng ban (List)
+    const deptStats = document.getElementById('dept-stats');
+    if(deptStats) {
+        let html = '';
+        departments.forEach(d => {
+            const count = employees.filter(e => e.dept === d.name).length;
+            html += `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee">
+                <span>${d.name}</span> <span style="font-weight:bold">${count} NV</span>
+            </div>`;
+        });
+        deptStats.innerHTML = html;
     }
+}
+
+// --- SCHEDULE UTILS ---
+window.changeWeekPicker = () => renderScheduleTable(employees);
+window.toggleShift = (cell) => toggleShiftLogic(cell);
+window.saveScheduleChanges = () => alert("Đã lưu lịch làm việc thành công!");
+
+window.filterSchedule = () => {
+    const search = document.getElementById('searchScheduleName').value.toLowerCase();
+    const dept = document.getElementById('filterScheduleDept').value;
+    document.querySelectorAll('.sched-row').forEach(row => {
+        const rName = row.dataset.name;
+        const rDept = row.dataset.dept;
+        const show = rName.includes(search) && (dept === "" || rDept === dept);
+        row.style.display = show ? '' : 'none';
+    });
 };
 
-window.handleLogout = function() {
-    if(confirm("Bạn muốn đăng xuất khỏi hệ thống?")) {
-        localStorage.removeItem('isLoggedIn');
-        localStorage.removeItem('username');
-        location.reload(); // Tải lại trang để về màn hình login
-    }
-};
-
-// --- 4. CHỨC NĂNG PHÒNG BAN (Gọi API Node.js) ---
-
-window.openDeptModal = function(mode, id = null, name = '', desc = '') {
-    const modal = document.getElementById('deptModal');
-    if(modal) modal.style.display = 'flex';
-
-    document.getElementById('deptKey').value = id || '';
-    document.getElementById('deptName').value = name;
-    document.getElementById('deptDesc').value = desc;
-};
-
-window.closeDeptModal = function() {
-    const modal = document.getElementById('deptModal');
-    if(modal) modal.style.display = 'none';
-};
-
-// Tải danh sách phòng ban
-async function loadDepartments() {
-    const tbody = document.getElementById('deptTableBody');
+// --- HISTORY LOGIC (Giả lập hoặc load thật) ---
+window.loadSystemHistory = () => {
+    const tbody = document.getElementById('historyTableBody');
     if(!tbody) return;
+    tbody.innerHTML = '';
     
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center">⏳ Đang tải dữ liệu...</td></tr>';
-
-    try {
-        const response = await fetch(`${API_URL}/departments`);
-        const data = await response.json();
-
-        tbody.innerHTML = ''; 
-
-        if(!data || Object.keys(data).length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có dữ liệu</td></tr>';
-            return;
-        }
-
-        let index = 1;
-        for (const [key, value] of Object.entries(data)) {
-            const row = `
-                <tr>
-                    <td>${index++}</td>
-                    <td><b>${value.name}</b></td>
-                    <td>${value.desc}</td>
-                    <td>
-                        <button class="btn-edit" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-right:5px" 
-                            onclick="window.openDeptModal('edit', '${key}', '${value.name}', '${value.desc}')">
-                            <i class="fas fa-edit"></i> Sửa
-                        </button>
-                        <button class="btn-delete" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer" 
-                            onclick="window.deleteDepartment('${key}')">
-                            <i class="fas fa-trash"></i> Xóa
-                        </button>
-                    </td>
-                </tr>
-            `;
-            tbody.innerHTML += row;
-        }
-    } catch (error) {
-        console.error("Lỗi tải API:", error);
-        tbody.innerHTML = '<tr><td colspan="4" style="color:red; text-align:center">❌ Lỗi kết nối Server!</td></tr>';
-    }
-}
-
-// Lưu Phòng Ban
-window.saveDepartment = async function(event) {
-    event.preventDefault();
+    // Mock data demo (Bạn có thể thay bằng fetch Firebase 'logs' nếu có)
+    const logs = [
+        { time: '09:00 09/01', user: 'Admin', action: 'Đăng nhập', detail: 'Đăng nhập hệ thống thành công' },
+        { time: '08:30 09/01', user: 'Admin', action: 'Sửa nhân viên', detail: 'Cập nhật hồ sơ NV001' },
+        { time: '17:00 08/01', user: 'System', action: 'Backup', detail: 'Sao lưu dữ liệu tự động' }
+    ];
     
-    const key = document.getElementById('deptKey').value;
-    const name = document.getElementById('deptName').value;
-    const desc = document.getElementById('deptDesc').value;
-    const adminName = localStorage.getItem('username') || "Admin";
-
-    const payload = { key, name, desc, adminName };
-
-    try {
-        const response = await fetch(`${API_URL}/departments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            alert(result.message);
-            window.closeDeptModal();
-            loadDepartments(); 
-        } else {
-            alert("Lỗi: " + result.message);
-        }
-    } catch (error) {
-        alert("Không thể kết nối tới Server!");
-        console.error(error);
-    }
+    logs.forEach(l => {
+        tbody.innerHTML += `<tr>
+            <td>${l.time}</td>
+            <td>${l.user}</td>
+            <td><span style="color:blue">${l.action}</span></td>
+            <td>${l.detail}</td>
+        </tr>`;
+    });
 };
 
-// Xóa Phòng Ban
-window.deleteDepartment = async function(id) {
-    if (!confirm("Bạn có chắc muốn xóa phòng ban này?")) return;
-
-    try {
-        const response = await fetch(`${API_URL}/departments/${id}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminName: localStorage.getItem('username') })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            loadDepartments(); 
-        } else {
-            alert("Lỗi: " + result.message);
-        }
-    } catch (error) {
-        alert("Lỗi khi xóa!");
-    }
-};
-
-// --- 5. CHỨC NĂNG CHỨC VỤ (Positions) ---
-
-window.openPosModal = function(mode, id = null, name = '', desc = '') {
-    const modal = document.getElementById('posModal');
-    if(modal) modal.style.display = 'flex';
-    document.getElementById('posKey').value = id || '';
-    document.getElementById('posName').value = name;
-    document.getElementById('posDesc').value = desc;
-};
-
-window.closePosModal = function() {
-    document.getElementById('posModal').style.display = 'none';
-};
-
-// Tải danh sách Chức vụ
-async function loadPositions() {
-    const tbody = document.getElementById('posTableBody');
-    if(!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4">Đang tải...</td></tr>';
-
-    try {
-        const response = await fetch(`${API_URL}/positions`);
-        const data = await response.json();
-        tbody.innerHTML = ''; 
-
-        if(!data || Object.keys(data).length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4">Chưa có dữ liệu</td></tr>';
-            return;
-        }
-
-        let index = 1;
-        for (const [key, value] of Object.entries(data)) {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${index++}</td>
-                    <td><b>${value.name}</b></td>
-                    <td>${value.desc}</td>
-                    <td>
-                        <button class="btn-warning" style="border:none; padding:5px; border-radius:4px; cursor:pointer" onclick="window.openPosModal('edit', '${key}', '${value.name}', '${value.desc}')">Sửa</button>
-                        <button class="btn-danger" style="border:none; padding:5px; border-radius:4px; cursor:pointer" onclick="window.deletePosition('${key}')">Xóa</button>
-                    </td>
-                </tr>`;
-        }
-    } catch (e) { console.error(e); }
-}
-
-// Lưu Chức vụ
-window.savePosition = async function(event) {
-    event.preventDefault();
-    const payload = {
-        key: document.getElementById('posKey').value,
-        name: document.getElementById('posName').value,
-        desc: document.getElementById('posDesc').value,
-        adminName: localStorage.getItem('username')
-    };
-    await sendData(`${API_URL}/positions`, payload, window.closePosModal, loadPositions);
-};
-
-// Xóa Chức vụ
-window.deletePosition = async function(id) {
-    if(confirm("Xóa chức vụ này?")) {
-        await deleteData(`${API_URL}/positions/${id}`, loadPositions);
-    }
-};
-
-
-// --- 6. CHỨC NĂNG NHÂN VIÊN (Employees) ---
-
-// Mở Modal Nhân viên (Tự động tải danh sách Phòng ban/Chức vụ vào Select)
-window.openModal = async function(mode, id=null) {
-    document.getElementById('modal').style.display = 'flex';
-    document.getElementById('empKey').value = id || '';
-    
-    // Reset form nếu là thêm mới
-    if(mode === 'add') {
-        document.getElementById('empForm').reset();
-        document.getElementById('status').value = 'working';
-    }
-
-    // Tải dữ liệu vào thẻ Select (Dropdown)
-    await loadSelectOptions();
-};
-
-window.closeModal = function() {
-    document.getElementById('modal').style.display = 'none';
-};
-
-// Hàm hỗ trợ tải Options cho Select box
-async function loadSelectOptions() {
-    try {
-        // Tải phòng ban
-        const deptRes = await fetch(`${API_URL}/departments`);
-        const depts = await deptRes.json();
-        const deptSelect = document.getElementById('dept');
-        deptSelect.innerHTML = '<option value="">-- Chọn --</option>';
-        for(const [k, v] of Object.entries(depts)) {
-            deptSelect.innerHTML += `<option value="${v.name}">${v.name}</option>`;
-        }
-
-        // Tải chức vụ
-        const posRes = await fetch(`${API_URL}/positions`);
-        const pos = await posRes.json();
-        const posSelect = document.getElementById('pos');
-        posSelect.innerHTML = '<option value="">-- Chọn --</option>';
-        for(const [k, v] of Object.entries(pos)) {
-            posSelect.innerHTML += `<option value="${v.name}">${v.name}</option>`;
-        }
-    } catch(e) { console.error("Lỗi tải select:", e); }
-}
-
-// Tải danh sách Nhân viên
-async function loadEmployees() {
-    const tbody = document.getElementById('tableBody');
-    if(!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6">Đang tải...</td></tr>';
-
-    try {
-        const response = await fetch(`${API_URL}/employees`);
-        const data = await response.json();
-        tbody.innerHTML = '';
-        document.getElementById('total-staff').innerText = Object.keys(data).length; // Cập nhật số tổng
-
-        if(!data || Object.keys(data).length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6">Chưa có nhân viên</td></tr>';
-            return;
-        }
-
-        for (const [key, val] of Object.entries(data)) {
-            tbody.innerHTML += `
-                <tr>
-                    <td><b>${val.name}</b><br><small>${val.email}</small></td>
-                    <td>${val.code}</td>
-                    <td>${val.dept}</td>
-                    <td>${val.pos}</td>
-                    <td><span style="padding:4px; border-radius:4px; background:${val.status=='working'?'#2ecc71':'#e74c3c'}; color:white">${val.status}</span></td>
-                    <td>
-                         <button class="btn-delete" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer" onclick="window.deleteEmployee('${key}')"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>`;
-        }
-    } catch (e) { console.error(e); }
-}
-
-// Lưu Nhân viên
-window.saveEmployee = async function(event) {
-    event.preventDefault();
-    const payload = {
-        key: document.getElementById('empKey').value,
-        code: document.getElementById('code').value,
-        name: document.getElementById('name').value,
-        email: document.getElementById('email').value,
-        dept: document.getElementById('dept').value,
-        pos: document.getElementById('pos').value,
-        startDate: document.getElementById('startDate').value,
-        shift: document.getElementById('shift').value,
-        status: document.getElementById('status').value,
-        adminName: localStorage.getItem('username')
-    };
-    await sendData(`${API_URL}/employees`, payload, window.closeModal, loadEmployees);
-};
-
-window.deleteEmployee = async function(id) {
-    if(confirm("Xóa nhân viên này?")) {
-        await deleteData(`${API_URL}/employees/${id}`, loadEmployees);
-    }
-};
-
-// --- HÀM HỖ TRỢ CHUNG (Rút gọn code) ---
-async function sendData(url, data, closeFunc, reloadFunc) {
-    try {
-        const res = await fetch(url, {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        if(result.success) { alert(result.message); closeFunc(); reloadFunc(); }
-        else { alert("Lỗi: " + result.message); }
-    } catch(e) { alert("Lỗi Server"); }
-}
-
-async function deleteData(url, reloadFunc) {
-    try {
-        const res = await fetch(url, {
-            method: 'DELETE', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({adminName: localStorage.getItem('username')})
-        });
-        const result = await res.json();
-        if(result.success) reloadFunc(); else alert("Lỗi: " + result.message);
-    } catch(e) { alert("Lỗi xóa"); }
-}
-
-// Gọi API tải dữ liệu khi chuyển Tab
-// (Sửa lại hàm switchTab cũ một chút để gọi các hàm load này)
-const oldSwitchTab = window.switchTab;
-window.switchTab = function(tabId, el) {
-    oldSwitchTab(tabId, el); // Gọi logic cũ
-    if(tabId === 'positions') loadPositions();
-    if(tabId === 'employees') loadEmployees();
-};
+// --- DATA LISTENER ---
+window.addEventListener('dataUpdated', () => {
+    if (document.getElementById('overview').classList.contains('active')) renderDashboard();
+});

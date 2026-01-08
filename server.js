@@ -1,4 +1,4 @@
-// server.js - FULL UPDATE
+// FILE: server.js (FULL 100%)
 
 const express = require('express');
 const admin = require('firebase-admin');
@@ -8,7 +8,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- 1. KẾT NỐI FIREBASE (Đã fix lỗi crash) ---
+// 1. KẾT NỐI FIREBASE
 let serviceAccount;
 try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -24,120 +24,88 @@ try {
     console.log("✅ Firebase connected successfully!");
 } catch (error) {
     console.error("❌ Firebase connection error:", error.message);
-    process.exit(1);
 }
 
 const db = admin.database();
 
-// --- 2. CẤU HÌNH SERVER ---
+// 2. CẤU HÌNH SERVER
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// --- 3. ROUTES (GIAO DIỆN) ---
-app.get('/', (req, res) => {
-    res.render('index');
-});
+// 3. ROUTES
+app.get('/', (req, res) => res.render('index'));
 
-// --- 4. API ENDPOINTS (DỮ LIỆU) ---
+// 4. API ENDPOINTS
 
-// === A. MODULE PHÒNG BAN (DEPARTMENTS) ===
+// --- MODULE PHÒNG BAN ---
 app.get('/api/departments', async (req, res) => {
-    try {
-        const snapshot = await db.ref('departments').once('value');
-        res.json(snapshot.val() || {});
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const s = await db.ref('departments').once('value'); res.json(s.val() || {});
 });
-
 app.post('/api/departments', async (req, res) => {
-    try {
-        const { key, name, desc, adminName } = req.body;
-        const ref = key ? db.ref(`departments/${key}`) : db.ref('departments').push();
-        
-        await ref.set({ name, desc });
-        
-        // Ghi lịch sử
-        await logHistory(adminName, key ? 'Sửa' : 'Thêm', 'Phòng ban', `Tên: ${name}`);
-        
-        res.json({ success: true, message: "Lưu phòng ban thành công!" });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    const { key, name, desc, adminName } = req.body;
+    const ref = key ? db.ref(`departments/${key}`) : db.ref('departments').push();
+    await ref.set({ name, desc });
+    await logHistory(adminName, key?'Sửa':'Thêm', 'Phòng ban', name);
+    res.json({ success: true, message: "Thành công!" });
 });
-
 app.delete('/api/departments/:id', async (req, res) => {
-    try {
-        const { adminName } = req.body; // Lấy tên người xóa để ghi log
-        await db.ref(`departments/${req.params.id}`).remove();
-        await logHistory(adminName || 'Admin', 'Xóa', 'Phòng ban', `ID: ${req.params.id}`);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    await db.ref(`departments/${req.params.id}`).remove();
+    res.json({ success: true });
 });
 
-// === B. MODULE CHỨC VỤ (POSITIONS) - MỚI THÊM ===
+// --- MODULE CHỨC VỤ ---
 app.get('/api/positions', async (req, res) => {
-    try {
-        const snapshot = await db.ref('positions').once('value');
-        res.json(snapshot.val() || {});
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const s = await db.ref('positions').once('value'); res.json(s.val() || {});
 });
-
 app.post('/api/positions', async (req, res) => {
-    try {
-        const { key, name, desc, adminName } = req.body;
-        const ref = key ? db.ref(`positions/${key}`) : db.ref('positions').push();
-        await ref.set({ name, desc });
-        await logHistory(adminName, key ? 'Sửa' : 'Thêm', 'Chức vụ', `Tên: ${name}`);
-        res.json({ success: true, message: "Lưu chức vụ thành công!" });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    const { key, name, desc, adminName } = req.body;
+    const ref = key ? db.ref(`positions/${key}`) : db.ref('positions').push();
+    await ref.set({ name, desc });
+    await logHistory(adminName, key?'Sửa':'Thêm', 'Chức vụ', name);
+    res.json({ success: true, message: "Thành công!" });
 });
-
 app.delete('/api/positions/:id', async (req, res) => {
-    try {
-        const { adminName } = req.body;
-        await db.ref(`positions/${req.params.id}`).remove();
-        await logHistory(adminName || 'Admin', 'Xóa', 'Chức vụ', `ID: ${req.params.id}`);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    await db.ref(`positions/${req.params.id}`).remove();
+    res.json({ success: true });
 });
 
-// === C. MODULE NHÂN VIÊN (EMPLOYEES) - MỚI THÊM ===
+// --- MODULE NHÂN VIÊN (FULL INFO) ---
 app.get('/api/employees', async (req, res) => {
-    try {
-        const snapshot = await db.ref('employees').once('value');
-        res.json(snapshot.val() || {});
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const s = await db.ref('employees').once('value'); res.json(s.val() || {});
 });
-
 app.post('/api/employees', async (req, res) => {
-    try {
-        const { key, code, name, email, dept, pos, status, startDate, shift, adminName } = req.body;
-        const ref = key ? db.ref(`employees/${key}`) : db.ref('employees').push();
-        
-        await ref.set({ code, name, email, dept, pos, status, startDate, shift });
-        await logHistory(adminName, key ? 'Sửa' : 'Thêm', 'Nhân viên', `${name} (${code})`);
-        
-        res.json({ success: true, message: "Lưu nhân viên thành công!" });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
-});
+    const { key, code, name, email, password, phone, address, licensePlate, dept, pos, status, startDate, shift, adminName } = req.body;
+    const ref = key ? db.ref(`employees/${key}`) : db.ref('employees').push();
+    
+    let empData = { code, name, email, phone, address, licensePlate, dept, pos, status, startDate, shift };
+    if (password && password.trim() !== "") empData.password = password;
+    else if (!key) empData.password = "123456"; // Default pass
 
+    if (key) await ref.update(empData); else await ref.set(empData);
+    
+    await logHistory(adminName, key?'Sửa':'Thêm', 'Nhân viên', `${name} - ${code}`);
+    res.json({ success: true, message: "Lưu nhân viên thành công!" });
+});
 app.delete('/api/employees/:id', async (req, res) => {
-    try {
-        const { adminName } = req.body;
-        await db.ref(`employees/${req.params.id}`).remove();
-        await logHistory(adminName || 'Admin', 'Xóa', 'Nhân viên', `ID: ${req.params.id}`);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    await db.ref(`employees/${req.params.id}`).remove();
+    res.json({ success: true });
 });
 
-// --- 5. HÀM GHI LỊCH SỬ (HISTORY LOG) ---
+// --- MODULE LỊCH & PHÂN QUYỀN (MỚI) ---
+app.get('/api/schedule', async (req, res) => {
+    const s = await db.ref('schedule').once('value'); res.json(s.val() || {});
+});
+app.get('/api/permissions', async (req, res) => {
+    const s = await db.ref('permissions').once('value'); res.json(s.val() || {});
+});
+
+// 5. HISTORY LOG
 async function logHistory(user, action, target, detail) {
     const time = new Date().toLocaleString('vi-VN');
-    await db.ref('system_logs').push({
-        time, user: user || 'Unknown', action, target, detail
-    });
+    await db.ref('system_logs').push({ time, user: user||'Admin', action, target, detail });
 }
 
-// --- 6. KHỞI ĐỘNG SERVER ---
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+// 6. START
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

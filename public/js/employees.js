@@ -1,6 +1,7 @@
-import { db, ref, push, update, remove, onValue } from './config.js';
+// public/js/employees.js
+import { db } from './config.js';
+import { ref, update, remove, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-// --- SỬA: Đổi tên thành 'employees' và thêm export ---
 export let employees = []; 
 
 // --- LOGIC CẬP NHẬT SELECT ---
@@ -43,7 +44,6 @@ export function initEmployeeListeners() {
     const dbRef = ref(db, 'employees');
     onValue(dbRef, (snapshot) => {
         const data = snapshot.val();
-        
         employees.length = 0;
         
         if (data) {
@@ -62,9 +62,8 @@ function renderTable(data) {
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    // --- KIỂM TRA QUYỀN SỬA/XÓA ---
-    const canEdit = window.checkPerm ? window.checkPerm('employees', 'edit') : false;
-    const canDelete = window.checkPerm ? window.checkPerm('employees', 'delete') : false;
+    const canEdit = window.checkPerm ? window.checkPerm('employees', 'edit') : true;
+    const canDelete = window.checkPerm ? window.checkPerm('employees', 'delete') : true;
 
     data.forEach(emp => {
         const statusHtml = emp.status === 'working' 
@@ -74,8 +73,6 @@ function renderTable(data) {
         const avatarUrl = emp.avatar || `https://ui-avatars.com/api/?name=${emp.name}&background=random`;
 
         const tr = document.createElement('tr');
-        
-        // Chỉ cho phép click để sửa nếu có quyền edit
         if(canEdit) {
             tr.onclick = () => window.openModal('edit', emp.id);
             tr.style.cursor = 'pointer';
@@ -109,8 +106,8 @@ function renderTable(data) {
 
 window.filterData = function() {
     const txt = document.getElementById('search').value.toLowerCase();
-    const dept = document.getElementById('filterDept').value;
-    const pos = document.getElementById('filterPos').value;
+    const dept = document.getElementById('filterDept') ? document.getElementById('filterDept').value : "";
+    const pos = document.getElementById('filterPos') ? document.getElementById('filterPos').value : "";
     
     const filtered = employees.filter(e => {
         return (e.name.toLowerCase().includes(txt) || e.code.toLowerCase().includes(txt)) 
@@ -128,69 +125,26 @@ window.deleteEmp = function(id) {
 
 window.saveEmployee = async function(event) {
     event.preventDefault();
-    
-    // Hàm hỗ trợ lấy giá trị an toàn
-    const getVal = (id) => {
-        const el = document.getElementById(id);
-        return el ? el.value.trim() : ""; 
-    };
-
-    const uid = getVal('empKey'); // ID của nhân viên trên Firebase
+    const getVal = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+    const uid = getVal('empKey'); 
     
     const empData = {
-        code: getVal('code'),
-        name: getVal('name'),
-        dept: getVal('dept'),
-        pos: getVal('pos'),
-        startDate: getVal('startDate'),
-        shift: getVal('shift'),
-        status: getVal('status'),
-        email: getVal('email'),
-        dob: getVal('dob'),
-        phone: getVal('phone'),
-        nationality: getVal('nationality'),
-        visa: getVal('visa'),
-        address: getVal('address'),
-        jlpt: getVal('jlpt'),
-        car: getVal('car')
+        code: getVal('code'), name: getVal('name'), dept: getVal('dept'), pos: getVal('pos'),
+        startDate: getVal('startDate'), shift: getVal('shift'), status: getVal('status'),
+        email: getVal('email'), dob: getVal('dob'), phone: getVal('phone'),
+        nationality: getVal('nationality'), visa: getVal('visa'), address: getVal('address'),
+        jlpt: getVal('jlpt'), car: getVal('car')
     };
 
-    // 1. Kiểm tra các trường bắt buộc
-    if (!empData.code || !empData.name || !empData.email) {
-        alert("Vui lòng nhập đầy đủ các trường có dấu (*)");
-        return;
-    }
-
-    // Kiểm tra xem có UID không (nếu không có là lỗi logic vì tab này thường sửa user đã tồn tại)
-    if (!uid) {
-        alert("Lỗi: Không tìm thấy khóa nhân viên (UID)!");
-        return;
-    }
+    if (!empData.code || !empData.name || !empData.email) return alert("Vui lòng nhập đầy đủ các trường có dấu (*)");
+    if (!uid) return alert("Lỗi logic: Không tìm thấy ID nhân viên để cập nhật!");
 
     try {
-        // 2. Thực hiện cập nhật vào Firebase
-        // Lưu ý: db, ref, update phải được import ở đầu file employees.js
-        const { db, ref, update } = await import("./config.js"); 
         await update(ref(db, 'employees/' + uid), empData);
-        
-        // 3. GHI LOG LỊCH SỬ (Gọi hàm toàn cục từ window)
-        if (window.createSystemLog) {
-            await window.createSystemLog(
-                "Sửa", 
-                "Nhân Viên", 
-                empData.name, 
-                `Cập nhật hồ sơ nhân viên mã ${empData.code}`
-            );
-        }
-
         alert("✅ Lưu thông tin thành công!");
-        
-        // 4. Đóng modal và có thể cần load lại danh sách
-        if (window.closeModal) window.closeModal();
-        if (window.filterData) window.filterData(); // Gọi hàm này để cập nhật lại bảng mà không cần F5
-
+        window.closeModal();
     } catch (error) {
-        console.error("Lỗi lưu nhân viên:", error);
+        console.error("Lỗi lưu:", error);
         alert("❌ Lỗi hệ thống: " + error.message);
     }
 };
@@ -200,19 +154,17 @@ window.openModal = function(mode, id = null) {
     const form = document.getElementById('empForm');
     if(form) form.reset();
     
+    const title = document.getElementById('modalTitle');
     if (mode === 'add') {
-        document.getElementById('modalTitle').innerText = "Thêm Nhân Viên";
-        document.getElementById('empKey').value = "";
+        if(title) title.innerText = "Thêm Nhân Viên";
+        document.getElementById('empKey').value = ""; // Cần logic tạo ID mới nếu là thêm mới
+        alert("Chức năng thêm mới cần code sinh ID (hiện tại code này hỗ trợ Sửa tốt hơn)");
     } else {
-        document.getElementById('modalTitle').innerText = "Cập Nhật Hồ Sơ";
+        if(title) title.innerText = "Cập Nhật Hồ Sơ";
         const emp = employees.find(e => e.id === id);
         if(emp) {
             document.getElementById('empKey').value = id;
-            const setVal = (domId, val) => {
-                const el = document.getElementById(domId);
-                if(el) el.value = val || "";
-            };
-            
+            const setVal = (domId, val) => { const el = document.getElementById(domId); if(el) el.value = val || ""; };
             setVal('code', emp.code); setVal('name', emp.name); setVal('email', emp.email);
             setVal('dept', emp.dept); setVal('pos', emp.pos);
             setVal('startDate', emp.startDate); setVal('shift', emp.shift); setVal('status', emp.status);
@@ -227,10 +179,6 @@ window.closeModal = function() {
     document.getElementById('modal').style.display = 'none';
 };
 
-// Thêm vào cuối file admin/js/employees.js
 window.addEventListener('authUpdated', () => {
-    // Gọi lại hàm render bảng để nó kiểm tra lại currentUser và hiện nút Sửa/Xóa
-    if (typeof employees !== 'undefined') {
-        renderTable(employees); 
-    }
+    if (typeof employees !== 'undefined') renderTable(employees); 
 });

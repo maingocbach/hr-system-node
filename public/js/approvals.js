@@ -1,6 +1,7 @@
-import { db, ref, set, remove, onValue } from './config.js';
+// public/js/approvals.js
+import { db } from './config.js';
+import { ref, set, remove, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-// Export biến để các file khác dùng
 export let pendingList = [];
 
 export function initApprovalListeners() {
@@ -8,7 +9,6 @@ export function initApprovalListeners() {
     
     onValue(dbRef, (snapshot) => {
         const data = snapshot.val();
-        
         pendingList.length = 0;
         
         if (data) {
@@ -16,22 +16,14 @@ export function initApprovalListeners() {
                 pendingList.push({ id: key, ...data[key] });
             });
         }
-        
-        // Gọi render lần đầu khi có dữ liệu
         renderApprovalTable(pendingList);
     });
     
-    // Listeners cập nhật dropdown khi Dept/Pos thay đổi
     window.addEventListener('departmentsUpdated', (e) => updateSelect('approveDept', e.detail));
     window.addEventListener('positionsUpdated', (e) => updateSelect('approvePos', e.detail));
 }
 
-/**
- * QUAN TRỌNG: Lắng nghe sự kiện đăng nhập thành công
- * Khi Admin đăng nhập, hàm này sẽ vẽ lại bảng để hiện các nút Duyệt/Xóa
- */
 window.addEventListener('authUpdated', () => {
-    console.log("[Approvals] Nhận tín hiệu đăng nhập, cập nhật giao diện...");
     renderApprovalTable(pendingList);
 });
 
@@ -49,35 +41,19 @@ function renderApprovalTable(data) {
     if(!tbody) return;
     tbody.innerHTML = '';
 
-    // --- KIỂM TRA QUYỀN THỰC TẾ ---
-    const hasAuthFunc = typeof window.checkPerm === 'function';
-    const canApprove = hasAuthFunc ? window.checkPerm('approvals', 'edit') : false;
-    const canDelete = hasAuthFunc ? window.checkPerm('approvals', 'delete') : false;
+    const canApprove = window.checkPerm ? window.checkPerm('approvals', 'edit') : true;
+    const canDelete = window.checkPerm ? window.checkPerm('approvals', 'delete') : true;
 
     data.forEach(u => {
         const tr = document.createElement('tr');
-        
-        // Logic Click hàng
         if(canApprove) {
             tr.onclick = () => window.openApprovalModal(u.id);
             tr.style.cursor = 'pointer';
-        } else {
-            tr.style.cursor = 'not-allowed';
         }
 
-        // Tạo chuỗi HTML cho các nút bấm dựa trên quyền
         let actionHtml = '';
-        if (canApprove) {
-            actionHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); window.openApprovalModal('${u.id}')" style="margin-right:5px">Xem & Duyệt</button>`;
-        }
-        if (canDelete) {
-            actionHtml += `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); window.rejectUser('${u.id}')"><i class="fas fa-trash"></i></button>`;
-        }
-
-        // Nếu không có quyền nào thì hiện thông báo khóa
-        if (actionHtml === '') {
-            actionHtml = '<span style="color:#999; font-style:italic"><i class="fas fa-lock"></i> No Access</span>';
-        }
+        if (canApprove) actionHtml += `<button class="btn btn-primary" onclick="event.stopPropagation(); window.openApprovalModal('${u.id}')">Duyệt</button> `;
+        if (canDelete) actionHtml += `<button class="btn btn-danger" onclick="event.stopPropagation(); window.rejectUser('${u.id}')"><i class="fas fa-trash"></i></button>`;
 
         tr.innerHTML = `
             <td><strong>${u.name}</strong><br><small>${u.email}</small></td>
@@ -89,15 +65,8 @@ function renderApprovalTable(data) {
     });
 }
 
-// --- CÁC HÀM GỌI TỪ WINDOW ---
-
 window.openApprovalModal = function(id) {
-    // Bảo vệ 2 lớp: Check quyền khi mở form
-    if (window.checkPerm && !window.checkPerm('approvals', 'edit')) {
-        alert("Bạn CHƯA được cấp quyền xem/duyệt mục này!");
-        return;
-    }
-
+    if (window.checkPerm && !window.checkPerm('approvals', 'edit')) return alert("Không có quyền!");
     const user = pendingList.find(u => u.id === id);
     if (!user) return;
     
@@ -113,12 +82,7 @@ window.closeApprovalModal = () => document.getElementById('approvalModal').style
 
 window.approveUser = function(e) {
     e.preventDefault();
-
-    // Chặn ở mức logic xử lý
-    if (window.checkPerm && !window.checkPerm('approvals', 'edit')) {
-        alert("CẢNH BÁO: Bạn không có quyền Duyệt!");
-        return;
-    }
+    if (window.checkPerm && !window.checkPerm('approvals', 'edit')) return alert("Không có quyền!");
 
     const uid = document.getElementById('approveKey').value;
     const originalData = pendingList.find(u => u.id === uid) || {};
@@ -136,8 +100,7 @@ window.approveUser = function(e) {
     };
     
     delete finalData.id;
-
-    if (!finalData.dept || !finalData.pos) { alert("Chưa chọn Phòng/Ban hoặc Chức vụ!"); return; }
+    if (!finalData.dept || !finalData.pos) return alert("Chưa chọn Phòng/Ban hoặc Chức vụ!");
 
     if (confirm("Duyệt nhân viên này?")) {
         set(ref(db, 'employees/' + uid), finalData)
@@ -148,12 +111,7 @@ window.approveUser = function(e) {
 };
 
 window.rejectUser = function(id) {
-    // Chặn ở mức logic xóa
-    if (!window.checkPerm || !window.checkPerm('approvals', 'delete')) {
-        alert("CẢNH BÁO: Bạn không có quyền Xóa!");
-        return;
-    }
-
+    if (window.checkPerm && !window.checkPerm('approvals', 'delete')) return alert("Không có quyền!");
     if(confirm("Xóa yêu cầu này?")) {
         remove(ref(db, 'pending_users/' + id))
             .then(() => alert("Đã xóa."))

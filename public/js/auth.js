@@ -1,191 +1,133 @@
-// admin/js/auth.js
+// public/js/auth.js
 
-const MODULES = ['overview', 'approvals', 'employees', 'departments', 'positions', 'schedule', 'permissions'];
+const MODULES = ['overview', 'approvals', 'employees', 'departments', 'positions', 'permissions'];
 const ACTIONS = ['view', 'add', 'edit', 'delete'];
 
 const defaultPerms = {
     'role_admin': { 'all': true },
-    'pos_Staff': { 'schedule': ['view'], 'overview': ['view'] },
-    'pos_Nhân viên': { 'schedule': ['view'], 'overview': ['view'] }
+    'pos_Staff': { 'overview': ['view'] }
 };
 
 let permissionsData = JSON.parse(localStorage.getItem('hr_permissions')) || defaultPerms;
 let currentUser = null;
-let internalData = { departments: [], positions: [], users: [] };
 
-// --- 1. XỬ LÝ ĐĂNG NHẬP ---
+// Xử lý Login
 export function handleLogin(e, users) {
     e.preventDefault();
     const emailInput = document.getElementById('login-user').value.trim();
     const passInput = document.getElementById('login-pass').value.trim();
     const errorMsg = document.getElementById('login-error');
-    
-    if (emailInput === 'bachmn@gmail.com') {
-        if (passInput === 'admin' || passInput === '123456') {
-            currentUser = { id: 'super_admin', name: 'Bach MN (Super Admin)', email: 'bachmn@gmail.com', role: 'admin', pos: 'Director' };
-            loginSuccess();
-            return;
-        } else { errorMsg.innerText = 'Sai mật khẩu Super Admin!'; return; }
+
+    // Admin cứng
+    if (emailInput === 'admin' && passInput === '123456') {
+        currentUser = { id: 'admin', name: 'System Admin', role: 'admin', pos: 'admin' };
+        loginSuccess();
+        return;
     }
 
+    // Tìm user trong danh sách tải từ Firebase
     const user = users.find(u => u.email === emailInput || u.code === emailInput);
+    
     if (user) {
-        if (passInput === '123456') { currentUser = user; loginSuccess(); } 
-        else { errorMsg.innerText = 'Sai mật khẩu!'; }
+        // Tạm thời check pass đơn giản
+        if (passInput === '123456' || user.password === passInput) { 
+            currentUser = user; 
+            loginSuccess(); 
+        } else { errorMsg.innerText = 'Sai mật khẩu!'; }
     } else {
-        if(emailInput === 'admin' && passInput === 'admin') { currentUser = { name: 'System Admin', role: 'admin', pos: 'admin' }; loginSuccess(); }
-        else { errorMsg.innerText = 'Không tìm thấy tài khoản!'; }
+        errorMsg.innerText = 'Tài khoản không tồn tại!';
     }
 }
 
 function loginSuccess() {
     document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('login-error').innerText = '';
-    applyPermissions();
-    window.dispatchEvent(new CustomEvent('authUpdated'));
+    localStorage.setItem('hr_user', JSON.stringify(currentUser));
+    window.dispatchEvent(new CustomEvent('authUpdated', { detail: currentUser }));
 }
 
-export function handleLogout() {
-    currentUser = null;
-    document.getElementById('login-overlay').style.display = 'flex';
-    document.getElementById('login-user').value = '';
-    document.getElementById('login-pass').value = '';
-}
-
-// --- 2. LOGIC KIỂM TRA QUYỀN ---
+// Hàm kiểm tra quyền (để ẩn hiện nút bấm)
 export function checkPermission(module, action) {
     if (!currentUser) return false;
-    if (currentUser.email === 'bachmn@gmail.com') return true; 
     if (currentUser.role === 'admin' || currentUser.pos === 'admin') return true;
 
     const userPerm = permissionsData[`user_${currentUser.id}`];
     if (userPerm && (userPerm['all'] || (userPerm[module] && userPerm[module].includes(action)))) return true;
 
-    const posPerm = permissionsData[`pos_${currentUser.pos}`]; 
+    const posPerm = permissionsData[`pos_${currentUser.pos}`];
     if (posPerm && (posPerm['all'] || (posPerm[module] && posPerm[module].includes(action)))) return true;
-
-    const deptPerm = permissionsData[`dept_${currentUser.dept}`];
-    if (deptPerm && (deptPerm['all'] || (deptPerm[module] && deptPerm[module].includes(action)))) return true;
 
     return false;
 }
 
-// --- 3. ÁP DỤNG QUYỀN LÊN GIAO DIỆN ---
-export function applyPermissions() {
-    if (!currentUser) return;
-    MODULES.forEach(mod => {
-        const el = document.getElementById(`menu_${mod}`);
-        if(el) {
-            el.style.display = checkPermission(mod, 'view') ? 'block' : 'none';
-        }
-    });
-    
-    // Nếu đang ở tab permissions, render lại ma trận để disable checkbox nếu ko có quyền
-    if (document.getElementById('permissions').classList.contains('active')) {
-        if (currentSubjectId) loadMatrix(currentSubjectType, currentSubjectId, document.getElementById('currentPermSubject').innerText);
-    }
-}
-
-// --- 4. QUẢN LÝ TAB PHÂN QUYỀN ---
-let currentSubjectType = 'pos';
-let currentSubjectId = '';
-
-window.toggleColumn = function(action, headerCheckbox) {
-    // Chặn nếu không có quyền sửa
-    if (!checkPermission('permissions', 'edit')) {
-        alert("Bạn không có quyền sửa phân quyền!");
-        headerCheckbox.checked = !headerCheckbox.checked;
-        return;
-    }
-    const isChecked = headerCheckbox.checked;
-    MODULES.forEach(mod => {
-        const checkbox = document.getElementById(`perm_${mod}_${action}`);
-        if(checkbox && !checkbox.disabled) checkbox.checked = isChecked;
-    });
-};
-
+// Khởi tạo Tab Phân Quyền
 export function initPermissionTab(departments, positions, users) {
-    internalData.departments = departments;
-    internalData.positions = positions;
-    internalData.users = users;
-
+    // 1. Render danh sách bên trái
     window.loadPermSubjects = () => {
         const type = document.getElementById('permTypeSelect').value;
         const searchInput = document.getElementById('permSearchInput');
-        const searchTerm = searchInput ? searchInput.value.toLowerCase() : "";
-        currentSubjectType = type;
-
         if(searchInput) searchInput.style.display = (type === 'user') ? 'block' : 'none';
 
         const container = document.getElementById('permSubjectList');
         container.innerHTML = '';
-
+        
         let list = [];
-        if(type === 'pos') list = internalData.positions.map(p => ({id: p.name, name: p.name}));
-        else if(type === 'dept') list = internalData.departments.map(d => ({id: d.name, name: d.name}));
-        else {
-            list = internalData.users
-                .filter(u => u.name.toLowerCase().includes(searchTerm) || (u.email && u.email.toLowerCase().includes(searchTerm)))
-                .map(u => ({id: u.id, name: `${u.name} (${u.email || u.code})`}));
-        }
+        if(type === 'pos') list = positions;
+        else if(type === 'dept') list = departments;
+        else list = users;
 
         list.forEach(item => {
             const div = document.createElement('div');
-            div.className = 'perm-item' + (currentSubjectId === item.id ? ' active' : '');
+            div.className = 'perm-item';
             div.innerHTML = `<span>${item.name}</span> <i class="fas fa-chevron-right"></i>`;
             div.onclick = () => {
-                document.querySelectorAll('.perm-item').forEach(el => el.classList.remove('active'));
+                document.querySelectorAll('.perm-item').forEach(e => e.classList.remove('active'));
                 div.classList.add('active');
-                loadMatrix(type, item.id, item.name);
+                loadMatrix(type, item.id || item.name, item.name);
             };
             container.appendChild(div);
         });
     };
 
+    // 2. Logic Lưu Quyền
     window.savePermissions = () => {
-        // --- CHẶN LOGIC LƯU TẠI ĐÂY ---
-        if (!checkPermission('permissions', 'edit')) {
-            alert("Bạn không có quyền thực hiện thao tác này!");
-            return;
-        }
+        const titleEl = document.getElementById('currentPermSubject');
+        if(titleEl.innerText === '---') return alert("Chưa chọn đối tượng!");
 
-        if(!currentSubjectId) return;
-        const key = `${currentSubjectType}_${currentSubjectId}`;
+        const currentId = titleEl.dataset.id;
+        const currentType = titleEl.dataset.type;
+        const key = `${currentType}_${currentId}`;
         const newPerms = {};
+        
         MODULES.forEach(mod => {
-            const actions = [];
+            const acts = [];
             ACTIONS.forEach(act => {
-                const checkbox = document.getElementById(`perm_${mod}_${act}`);
-                if(checkbox && checkbox.checked) actions.push(act);
+                if(document.getElementById(`perm_${mod}_${act}`).checked) acts.push(act);
             });
-            if(actions.length > 0) newPerms[mod] = actions;
+            if(acts.length > 0) newPerms[mod] = acts;
         });
 
         permissionsData[key] = newPerms;
         localStorage.setItem('hr_permissions', JSON.stringify(permissionsData));
-        alert('Đã lưu phân quyền cho: ' + currentSubjectId);
+        alert("Đã lưu quyền thành công!");
+    };
+    
+    // Toggle cột
+    window.toggleColumn = (act, el) => {
+         MODULES.forEach(mod => {
+             const cb = document.getElementById(`perm_${mod}_${act}`);
+             if(cb) cb.checked = el.checked;
+         });
     };
 
     window.loadPermSubjects();
 }
 
+// Vẽ bảng checkbox bên phải
 function loadMatrix(type, id, name) {
-    currentSubjectId = id;
-    currentSubjectType = type;
-    document.getElementById('currentPermSubject').innerText = name;
-    
-    // Kiểm tra quyền sửa của user đang đăng nhập
-    const canEditPerm = checkPermission('permissions', 'edit');
-    
-    // Ẩn/Hiện nút Lưu
-    const saveBtn = document.querySelector('#permissions .btn-primary');
-    if (saveBtn) saveBtn.style.display = canEditPerm ? 'block' : 'none';
-
-    const headerChecks = document.querySelectorAll('thead input[type="checkbox"]');
-    headerChecks.forEach(ck => {
-        ck.checked = false;
-        ck.disabled = !canEditPerm; // Vô hiệu hóa "Chọn tất cả" nếu ko có quyền
-    });
+    const title = document.getElementById('currentPermSubject');
+    title.innerText = name;
+    title.dataset.id = id;
+    title.dataset.type = type;
 
     const key = `${type}_${id}`;
     const data = permissionsData[key] || {};
@@ -193,18 +135,12 @@ function loadMatrix(type, id, name) {
     tbody.innerHTML = '';
 
     MODULES.forEach(mod => {
-        let rowHtml = `<td><b>${mod.toUpperCase()}</b></td>`;
+        let row = `<tr><td style="text-align:left; font-weight:bold">${mod.toUpperCase()}</td>`;
         ACTIONS.forEach(act => {
-            const isChecked = data[mod] && data[mod].includes(act) ? 'checked' : '';
-            // THÊM: disabled nếu không có quyền sửa (canEditPerm)
-            const disabledAttr = canEditPerm ? '' : 'disabled';
-            rowHtml += `<td><input type="checkbox" class="perm-check" id="perm_${mod}_${act}" ${isChecked} ${disabledAttr}></td>`;
+            const checked = data[mod] && data[mod].includes(act) ? 'checked' : '';
+            row += `<td><input type="checkbox" id="perm_${mod}_${act}" ${checked}></td>`;
         });
-        tbody.appendChild(Object.assign(document.createElement('tr'), {innerHTML: rowHtml}));
+        row += '</tr>';
+        tbody.innerHTML += row;
     });
 }
-
-// Lắng nghe sự kiện authUpdated để render lại ma trận nếu đang mở tab permissions
-window.addEventListener('authUpdated', () => {
-    if (currentSubjectId) loadMatrix(currentSubjectType, currentSubjectId, document.getElementById('currentPermSubject').innerText);
-});
