@@ -221,11 +221,202 @@ window.deleteDepartment = async function(id) {
     }
 };
 
-// --- 5. HÀM CHỜ (PLACEHOLDER) ---
-window.openModal = () => alert("Chức năng đang cập nhật...");
-window.closeModal = () => document.getElementById('modal').style.display = 'none';
-window.openPosModal = () => alert("Chức năng đang cập nhật...");
-window.closePosModal = () => document.getElementById('posModal').style.display = 'none';
-window.openScanner = () => document.getElementById('scannerModal').style.display = 'flex';
-window.closeScanner = () => document.getElementById('scannerModal').style.display = 'none';
-window.changeLanguage = (lang) => alert("Đã chuyển ngôn ngữ: " + lang);
+// --- 5. CHỨC NĂNG CHỨC VỤ (Positions) ---
+
+window.openPosModal = function(mode, id = null, name = '', desc = '') {
+    const modal = document.getElementById('posModal');
+    if(modal) modal.style.display = 'flex';
+    document.getElementById('posKey').value = id || '';
+    document.getElementById('posName').value = name;
+    document.getElementById('posDesc').value = desc;
+};
+
+window.closePosModal = function() {
+    document.getElementById('posModal').style.display = 'none';
+};
+
+// Tải danh sách Chức vụ
+async function loadPositions() {
+    const tbody = document.getElementById('posTableBody');
+    if(!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4">Đang tải...</td></tr>';
+
+    try {
+        const response = await fetch(`${API_URL}/positions`);
+        const data = await response.json();
+        tbody.innerHTML = ''; 
+
+        if(!data || Object.keys(data).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">Chưa có dữ liệu</td></tr>';
+            return;
+        }
+
+        let index = 1;
+        for (const [key, value] of Object.entries(data)) {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${index++}</td>
+                    <td><b>${value.name}</b></td>
+                    <td>${value.desc}</td>
+                    <td>
+                        <button class="btn-warning" style="border:none; padding:5px; border-radius:4px; cursor:pointer" onclick="window.openPosModal('edit', '${key}', '${value.name}', '${value.desc}')">Sửa</button>
+                        <button class="btn-danger" style="border:none; padding:5px; border-radius:4px; cursor:pointer" onclick="window.deletePosition('${key}')">Xóa</button>
+                    </td>
+                </tr>`;
+        }
+    } catch (e) { console.error(e); }
+}
+
+// Lưu Chức vụ
+window.savePosition = async function(event) {
+    event.preventDefault();
+    const payload = {
+        key: document.getElementById('posKey').value,
+        name: document.getElementById('posName').value,
+        desc: document.getElementById('posDesc').value,
+        adminName: localStorage.getItem('username')
+    };
+    await sendData(`${API_URL}/positions`, payload, window.closePosModal, loadPositions);
+};
+
+// Xóa Chức vụ
+window.deletePosition = async function(id) {
+    if(confirm("Xóa chức vụ này?")) {
+        await deleteData(`${API_URL}/positions/${id}`, loadPositions);
+    }
+};
+
+
+// --- 6. CHỨC NĂNG NHÂN VIÊN (Employees) ---
+
+// Mở Modal Nhân viên (Tự động tải danh sách Phòng ban/Chức vụ vào Select)
+window.openModal = async function(mode, id=null) {
+    document.getElementById('modal').style.display = 'flex';
+    document.getElementById('empKey').value = id || '';
+    
+    // Reset form nếu là thêm mới
+    if(mode === 'add') {
+        document.getElementById('empForm').reset();
+        document.getElementById('status').value = 'working';
+    }
+
+    // Tải dữ liệu vào thẻ Select (Dropdown)
+    await loadSelectOptions();
+};
+
+window.closeModal = function() {
+    document.getElementById('modal').style.display = 'none';
+};
+
+// Hàm hỗ trợ tải Options cho Select box
+async function loadSelectOptions() {
+    try {
+        // Tải phòng ban
+        const deptRes = await fetch(`${API_URL}/departments`);
+        const depts = await deptRes.json();
+        const deptSelect = document.getElementById('dept');
+        deptSelect.innerHTML = '<option value="">-- Chọn --</option>';
+        for(const [k, v] of Object.entries(depts)) {
+            deptSelect.innerHTML += `<option value="${v.name}">${v.name}</option>`;
+        }
+
+        // Tải chức vụ
+        const posRes = await fetch(`${API_URL}/positions`);
+        const pos = await posRes.json();
+        const posSelect = document.getElementById('pos');
+        posSelect.innerHTML = '<option value="">-- Chọn --</option>';
+        for(const [k, v] of Object.entries(pos)) {
+            posSelect.innerHTML += `<option value="${v.name}">${v.name}</option>`;
+        }
+    } catch(e) { console.error("Lỗi tải select:", e); }
+}
+
+// Tải danh sách Nhân viên
+async function loadEmployees() {
+    const tbody = document.getElementById('tableBody');
+    if(!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6">Đang tải...</td></tr>';
+
+    try {
+        const response = await fetch(`${API_URL}/employees`);
+        const data = await response.json();
+        tbody.innerHTML = '';
+        document.getElementById('total-staff').innerText = Object.keys(data).length; // Cập nhật số tổng
+
+        if(!data || Object.keys(data).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">Chưa có nhân viên</td></tr>';
+            return;
+        }
+
+        for (const [key, val] of Object.entries(data)) {
+            tbody.innerHTML += `
+                <tr>
+                    <td><b>${val.name}</b><br><small>${val.email}</small></td>
+                    <td>${val.code}</td>
+                    <td>${val.dept}</td>
+                    <td>${val.pos}</td>
+                    <td><span style="padding:4px; border-radius:4px; background:${val.status=='working'?'#2ecc71':'#e74c3c'}; color:white">${val.status}</span></td>
+                    <td>
+                         <button class="btn-delete" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer" onclick="window.deleteEmployee('${key}')"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`;
+        }
+    } catch (e) { console.error(e); }
+}
+
+// Lưu Nhân viên
+window.saveEmployee = async function(event) {
+    event.preventDefault();
+    const payload = {
+        key: document.getElementById('empKey').value,
+        code: document.getElementById('code').value,
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        dept: document.getElementById('dept').value,
+        pos: document.getElementById('pos').value,
+        startDate: document.getElementById('startDate').value,
+        shift: document.getElementById('shift').value,
+        status: document.getElementById('status').value,
+        adminName: localStorage.getItem('username')
+    };
+    await sendData(`${API_URL}/employees`, payload, window.closeModal, loadEmployees);
+};
+
+window.deleteEmployee = async function(id) {
+    if(confirm("Xóa nhân viên này?")) {
+        await deleteData(`${API_URL}/employees/${id}`, loadEmployees);
+    }
+};
+
+// --- HÀM HỖ TRỢ CHUNG (Rút gọn code) ---
+async function sendData(url, data, closeFunc, reloadFunc) {
+    try {
+        const res = await fetch(url, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if(result.success) { alert(result.message); closeFunc(); reloadFunc(); }
+        else { alert("Lỗi: " + result.message); }
+    } catch(e) { alert("Lỗi Server"); }
+}
+
+async function deleteData(url, reloadFunc) {
+    try {
+        const res = await fetch(url, {
+            method: 'DELETE', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({adminName: localStorage.getItem('username')})
+        });
+        const result = await res.json();
+        if(result.success) reloadFunc(); else alert("Lỗi: " + result.message);
+    } catch(e) { alert("Lỗi xóa"); }
+}
+
+// Gọi API tải dữ liệu khi chuyển Tab
+// (Sửa lại hàm switchTab cũ một chút để gọi các hàm load này)
+const oldSwitchTab = window.switchTab;
+window.switchTab = function(tabId, el) {
+    oldSwitchTab(tabId, el); // Gọi logic cũ
+    if(tabId === 'positions') loadPositions();
+    if(tabId === 'employees') loadEmployees();
+};
